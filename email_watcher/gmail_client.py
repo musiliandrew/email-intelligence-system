@@ -64,6 +64,53 @@ class GmailWatcherClient:
             
         return email_data_list
 
+    def fetch_messages_by_history_id(self, history_id: str) -> List[Dict[str, Any]]:
+        """
+        Uses the Gmail History API to fetch only the messages that changed since history_id.
+        This avoids polling and makes the Webhook highly efficient.
+        """
+        try:
+            results = self.service.users().history().list(userId='me', startHistoryId=history_id).execute()
+            histories = results.get('history', [])
+            
+            email_data_list = []
+            for record in histories:
+                # We only care about newly added messages
+                messages_added = record.get('messagesAdded', [])
+                for msg_added in messages_added:
+                    msg = msg_added.get('message')
+                    if not msg:
+                        continue
+                        
+                    msg_id = msg['id']
+                    msg_detail = self.service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+                    
+                    headers = msg_detail['payload'].get('headers', [])
+                    subject = next((h['value'] for h in headers if h['name'] == 'Subject'), "No Subject")
+                    sender = next((h['value'] for h in headers if h['name'] == 'From'), "Unknown Sender")
+                    date = next((h['value'] for h in headers if h['name'] == 'Date'), "")
+                    
+                    # Basic heuristic check to filter junk before passing to LLM
+                    subject_lower = subject.lower()
+                    if not any(k in subject_lower for k in ["application", "interview", "update", "candidate", "role", "offer"]):
+                        continue
+                        
+                    body = self._extract_body(msg_detail['payload'])
+                    
+                    email_data_list.append({
+                        "id": msg_id,
+                        "subject": subject,
+                        "sender": sender,
+                        "date": date,
+                        "body": body,
+                        "snippet": msg_detail.get('snippet', '')
+                    })
+            
+            return email_data_list
+        except Exception as e:
+            print(f"Failed to fetch history: {e}")
+            return []
+
     def _extract_body(self, payload: Dict[str, Any]) -> str:
         """
         Recursively extracts the plain text body from the Gmail payload structure.
