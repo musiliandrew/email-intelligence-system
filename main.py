@@ -79,3 +79,27 @@ async def gmail_webhook(request: PubSubMessage):
             logger.error(f"Failed to parse or publish email {email_data.get('id')}: {e}")
 
     return {"status": "ok", "processed_events": processed_count}
+
+@app.post("/webhook/agent/followup")
+async def trigger_followup_agent(request: Request):
+    """
+    Triggered by the Event Bus when 7 days have passed since an application.
+    Executes the Follow-up Agent to generate and save a draft in Gmail.
+    """
+    from agents.followup_agent import FollowUpAgent
+    
+    body = await request.json()
+    company_name = body.get("company_name")
+    role_title = body.get("role_title")
+    recruiter_email = body.get("recruiter_email")
+    
+    if not company_name or not role_title or not recruiter_email:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+        
+    agent = FollowUpAgent()
+    draft_id = await agent.execute(company_name, role_title, recruiter_email)
+    
+    if draft_id:
+        return {"status": "ok", "draft_id": draft_id}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to execute Follow-up Agent")

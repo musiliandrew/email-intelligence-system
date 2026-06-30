@@ -7,7 +7,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose']
 
 class GmailWatcherClient:
     def __init__(self, token_path: str = 'token.json', credentials_path: str = 'credentials.json'):
@@ -127,3 +127,24 @@ class GmailWatcherClient:
             return base64.urlsafe_b64decode(data).decode('utf-8')
             
         return ""
+
+    def create_draft(self, to_email: str, subject: str, body: str) -> Optional[str]:
+        """
+        Creates an email draft in the user's Gmail account.
+        """
+        from email.message import EmailMessage
+        message = EmailMessage()
+        message.set_content(body)
+        message['To'] = to_email
+        message['Subject'] = subject
+
+        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        create_message = {'message': {'raw': encoded_message}}
+        
+        try:
+            draft = self.service.users().drafts().create(userId='me', body=create_message).execute()
+            print(f"Draft id: {draft['id']} created.")
+            return draft['id']
+        except Exception as e:
+            print(f"An error occurred creating draft: {e}")
+            return None

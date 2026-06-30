@@ -14,10 +14,11 @@ flowchart LR
     Parser -- Structured Payload --> PubSub[GCP Pub/Sub]
 ```
 
-1. **Webhook Listener (`main.py`)**: A FastAPI server that exposes `/webhook/gmail`. Google Cloud Pub/Sub sends a `historyId` to this endpoint when an email arrives.
-2. **Efficient Fetcher (`gmail_client.py`)**: Uses the `historyId` to query the Gmail API for *only* the specific email that triggered the push, avoiding wasteful polling.
-3. **LLM Extraction (`parser.py`)**: Passes the raw email body to Gemini (via the `shared` SDK) using strict prompt engineering to classify the email into exactly one of: `ApplicationReceived`, `InterviewInvited`, or `ApplicationRejected`.
-4. **Event Publisher (`publisher.py`)**: Serializes the extracted intelligence into a Pydantic event payload and publishes it to the `careerscope.events` Pub/Sub topic for the Decision Engine to consume.
+1. **Webhook Listener (`main.py`)**: A FastAPI server that exposes `/webhook/gmail` (for inbound push notifications) and `/webhook/agent/followup` (for triggering agents).
+2. **Efficient Fetcher (`gmail_client.py`)**: Uses the `historyId` to query the Gmail API for *only* the specific email that triggered the push. Also contains `create_draft` to act on the inbox.
+3. **LLM Extraction (`parser.py`)**: Passes the raw email body to Gemini (via the `shared` SDK) using strict prompt engineering to classify the email.
+4. **Event Publisher (`publisher.py`)**: Serializes the extracted intelligence into a Pydantic event payload and publishes it to the `careerscope.events` Pub/Sub topic.
+5. **Domain Agents (`agents/followup_agent.py`)**: Contains agentic workflows. For example, the Follow-Up Agent is triggered after 7 days of silence. It uses Gemini to draft a tailored follow-up email and uses the Gmail API to drop it straight into the user's Drafts folder.
 
 ## Prerequisites
 
